@@ -53,6 +53,8 @@ public extension URLRequest {
         
         var request = URLRequest(url: url)
         request.httpMethod = httpMethod.rawValue
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("gzip, deflate, br", forHTTPHeaderField: "Accept-Encoding")
         
         if let headers {
             headers.forEach { key, value in
@@ -89,5 +91,18 @@ public extension NetworkRepositoryProtocol {
             throw NetworkError.badStatusCode(response.statusCode)
         }
     }
+    
+//    func postJSON(urlReq: URLRequest) async throws(NetworkError) {
+//        let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
+//        if response.statusCode == 200 {
+//            do {
+//                return try JSONDecoder().decode(model, from: data)
+//            } catch let error {
+//                throw NetworkError.errorDecode(error)
+//            }
+//        } else {
+//            throw NetworkError.badStatusCode(response.statusCode)
+//        }
+//    }
 }
 
