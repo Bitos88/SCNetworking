@@ -72,7 +72,7 @@ extension URLRequest {
     }
 }
 
-public protocol NetworkRepositoryProtocol {
+public protocol NetworkRepositoryProtocol: Sendable {
     var session: URLSession { get }
 }
 
