@@ -78,7 +78,7 @@ public protocol NetworkRepositoryProtocol: Sendable {
 
 extension NetworkRepositoryProtocol {
     public func getJSON<MODEL>(urlReq: URLRequest, model: MODEL.Type) async throws(NetworkError) -> MODEL where MODEL:Codable  {
-        let (data, response) = try await session.customData(urlReq: urlReq)
+        let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
         if response.statusCode == 200 {
             do {
                 return try JSONDecoder().decode(model, from: data)
