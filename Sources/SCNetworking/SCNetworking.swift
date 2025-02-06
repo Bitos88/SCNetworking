@@ -1,7 +1,7 @@
 import Foundation
 
-extension URLSession {
-    public func customData(urlReq: URLRequest) async throws(NetworkError) -> (Data, HTTPURLResponse) {
+public extension URLSession {
+    func customData(urlReq: URLRequest) async throws(NetworkError) -> (Data, HTTPURLResponse) {
         do {
             let (data, response) = try await data(for: urlReq)
             guard let respHTTPResp = response as? HTTPURLResponse else {
@@ -45,8 +45,8 @@ public enum HTTTMethod: String {
     case delete = "DETELE"
 }
 
-extension URLRequest {
-    public static func APIRequest(url: URL,
+public extension URLRequest {
+    static func APIRequest(url: URL,
                            headers: [String:String]? = nil,
                            httpMethod: HTTTMethod = .get,
                            body: Codable? = nil) throws(NetworkError) -> URLRequest {
@@ -76,8 +76,8 @@ public protocol NetworkRepositoryProtocol {
     var session: URLSession { get }
 }
 
-extension NetworkRepositoryProtocol {
-    public func getJSON<MODEL>(urlReq: URLRequest, model: MODEL.Type) async throws(NetworkError) -> MODEL where MODEL:Codable  {
+public extension NetworkRepositoryProtocol {
+    func getJSON<MODEL>(urlReq: URLRequest, model: MODEL.Type) async throws(NetworkError) -> MODEL where MODEL:Codable  {
         let (data, response) = try await session.customData(urlReq: urlReq)
         if response.statusCode == 200 {
             do {
