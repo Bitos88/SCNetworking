@@ -42,7 +42,7 @@ public enum HTTTMethod: String {
     case post = "POST"
     case put = "PUT"
     case update = "UPDATE"
-    case delete = "DETELE"
+    case delete = "DELETE"
 }
 
 public extension URLRequest {
