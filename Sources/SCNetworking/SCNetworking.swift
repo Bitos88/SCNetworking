@@ -20,6 +20,7 @@ public enum NetworkError: LocalizedError {
     case badStatusCode(Int)
     case errorDecode(Error)
     case errorEncode(Error)
+    case badResponse(Int, String)
     
     public var errorDescription: String {
         switch self {
@@ -33,6 +34,8 @@ public enum NetworkError: LocalizedError {
             "error Decode\(decodeError)"
         case .errorEncode(let encodedError):
             "error Encode\(encodedError)"
+        case .badResponse(let statusCode, let reason):
+            "bad response with status code: \(statusCode) & reason: \(reason)"
         }
     }
 }
@@ -69,7 +72,6 @@ public extension URLRequest {
                 throw .errorEncode(error)
             }
         }
-        
         return request
     }
 }
@@ -79,7 +81,7 @@ public protocol NetworkRepositoryProtocol {
 }
 
 public extension NetworkRepositoryProtocol {
-    func getJSON<MODEL>(urlReq: URLRequest, model: MODEL.Type) async throws(NetworkError) -> MODEL where MODEL:Codable  {
+    func getJSON<MODEL>(urlReq: URLRequest, model: MODEL.Type) async throws(NetworkError) -> MODEL where MODEL: Codable  {
         let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
         if response.statusCode == 200 {
             do {
@@ -92,17 +94,19 @@ public extension NetworkRepositoryProtocol {
         }
     }
     
-//    func postJSON(urlReq: URLRequest) async throws(NetworkError) {
-//        let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
-//        if response.statusCode == 200 {
-//            do {
-//                return try JSONDecoder().decode(model, from: data)
-//            } catch let error {
-//                throw NetworkError.errorDecode(error)
-//            }
-//        } else {
-//            throw NetworkError.badStatusCode(response.statusCode)
-//        }
-//    }
+    func postJSON(urlReq: URLRequest, statusCode: Int) async throws(NetworkError) {
+        let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
+        if response.statusCode != statusCode {
+            do {
+                let responseDecoded = try JSONDecoder().decode(APIResponse.self, from: data)
+                throw NetworkError.badResponse(response.statusCode, responseDecoded.reason)
+            } catch let error {
+                throw NetworkError.errorDecode(error)
+            }
+        }
+    }
 }
 
+struct APIResponse: Codable {
+    let reason: String
+}
