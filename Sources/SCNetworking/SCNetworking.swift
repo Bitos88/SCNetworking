@@ -94,7 +94,8 @@ public extension NetworkRepositoryProtocol {
         }
     }
     
-    func postJSON(urlReq: URLRequest, statusCode: Int) async throws(NetworkError) {
+    @discardableResult
+    func postJSON(urlReq: URLRequest, statusCode: Int) async throws(NetworkError) -> Data? {
         let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
         if response.statusCode != statusCode {
             do {
@@ -104,6 +105,7 @@ public extension NetworkRepositoryProtocol {
                 throw NetworkError.errorDecode(error)
             }
         }
+        return data
     }
 }
 
