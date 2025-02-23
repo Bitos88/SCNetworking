@@ -8,7 +8,16 @@ public extension URLSession {
                 throw NetworkError.nonHttp
             }
             return (data, respHTTPResp)
-        } catch let error {
+        } catch let urlError as URLError {
+            switch urlError.code {
+            case .notConnectedToInternet:
+                throw NetworkError.badStatus(-1009, "No internet connection")
+            case .timedOut:
+                throw NetworkError.badStatus(-1001, "Request timed out")
+            default:
+                throw NetworkError.general(urlError)
+            }
+        } catch {
             throw NetworkError.general(error)
         }
     }
@@ -17,30 +26,27 @@ public extension URLSession {
 public enum NetworkError: LocalizedError {
     case nonHttp
     case general(Error)
-    case badStatusCode(Int)
-    case errorDecode(Error)
-    case errorEncode(Error)
-    case badResponse(Int, String)
+    case badStatus(Int, String?)
+    case decodingFailed(Error)
+    case encodingFailed(Error)
     
     public var errorDescription: String {
         switch self {
         case .nonHttp:
-            "Non HTTp request"
-        case .general(let myError):
-            "General Error \(myError)"
-        case .badStatusCode (let statusCode):
-            "Wrong Status code\(statusCode)"
-        case .errorDecode (let decodeError):
-            "error Decode\(decodeError)"
-        case .errorEncode(let encodedError):
-            "error Encode\(encodedError)"
-        case .badResponse(let statusCode, let reason):
-            "bad response with status code: \(statusCode) & reason: \(reason)"
+            return "The request did not return an HTTP response."
+        case .general(let error):
+            return "An unexpected error occurred: \(error.localizedDescription)"
+        case .badStatus(let statusCode, let reason):
+            return "HTTP Error \(statusCode): \(reason ?? "Unknown error")"
+        case .decodingFailed(let error):
+            return "Failed to decode response: \(error.localizedDescription)"
+        case .encodingFailed(let error):
+            return "Failed to encode request body: \(error.localizedDescription)"
         }
     }
 }
 
-public enum HTTTMethod: String {
+public enum HTTPMethod: String {
     case get = "GET"
     case post = "POST"
     case put = "PUT"
@@ -51,13 +57,16 @@ public enum HTTTMethod: String {
 public extension URLRequest {
     static func APIRequest(url: URL,
                            headers: [String:String]? = nil,
-                           httpMethod: HTTTMethod = .get,
+                           httpMethod: HTTPMethod = .get,
                            body: Codable? = nil) throws(NetworkError) -> URLRequest {
         
         var request = URLRequest(url: url)
         request.httpMethod = httpMethod.rawValue
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("gzip, deflate, br", forHTTPHeaderField: "Accept-Encoding")
+        
+        if body != nil {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         
         if let headers {
             headers.forEach { key, value in
@@ -69,7 +78,7 @@ public extension URLRequest {
                 let encodedBody = try JSONEncoder().encode(body)
                 request.httpBody = encodedBody
             } catch {
-                throw .errorEncode(error)
+                throw .encodingFailed(error)
             }
         }
         return request
@@ -81,28 +90,30 @@ public protocol NetworkRepositoryProtocol {
 }
 
 public extension NetworkRepositoryProtocol {
-    func getJSON<MODEL>(urlReq: URLRequest, model: MODEL.Type) async throws(NetworkError) -> MODEL where MODEL: Codable  {
-        let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
-        if response.statusCode == 200 {
+    func getJSON<MODEL: Codable>(urlReq: URLRequest, model: MODEL.Type, validStatusCodes: Set<Int> = Set(200...299)) async throws(NetworkError) -> MODEL {
+            let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
+            
+            guard validStatusCodes.contains(response.statusCode) else {
+                throw NetworkError.badStatus(response.statusCode, "Unexpected status code")
+            }
+            
             do {
                 return try JSONDecoder().decode(model, from: data)
             } catch let error {
-                throw NetworkError.errorDecode(error)
+                throw NetworkError.decodingFailed(error)
             }
-        } else {
-            throw NetworkError.badStatusCode(response.statusCode)
         }
-    }
     
     @discardableResult
-    func postJSON(urlReq: URLRequest, statusCode: Int) async throws(NetworkError) -> Data? {
+    func postJSON(urlReq: URLRequest, validStatusCodes: Set<Int> = Set(200...299)) async throws(NetworkError) -> Data? {
         let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
-        if response.statusCode != statusCode {
+        
+        guard validStatusCodes.contains(response.statusCode) else {
             do {
                 let responseDecoded = try JSONDecoder().decode(APIResponse.self, from: data)
-                throw NetworkError.badResponse(response.statusCode, responseDecoded.reason)
+                throw NetworkError.badStatus(response.statusCode, responseDecoded.reason)
             } catch let error {
-                throw NetworkError.errorDecode(error)
+                throw NetworkError.decodingFailed(error)
             }
         }
         return data
