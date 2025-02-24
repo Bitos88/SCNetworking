@@ -62,32 +62,6 @@ public extension URLRequest {
     }
 }
 
-//public enum NetworkError: LocalizedError {
-//    case nonHttp
-//    case general(Error)
-//    case badStatus(Int, String?)
-//    case decodingFailed(Error)
-//    case encodingFailed(Error)
-//    case unauthorized
-//    
-//    public var errorDescription: String {
-//        switch self {
-//        case .nonHttp:
-//            return "The request did not return an HTTP response."
-//        case .general(let error):
-//            return "An unexpected error occurred: \(error.localizedDescription)"
-//        case .badStatus(let statusCode, let reason):
-//            return "HTTP Error \(statusCode): \(reason ?? "Unknown error")"
-//        case .decodingFailed(let error):
-//            return "Failed to decode response: \(error.localizedDescription)"
-//        case .encodingFailed(let error):
-//            return "Failed to encode request body: \(error.localizedDescription)"
-//        case .unauthorized:
-//            return "Email o contraseña incorrectos."
-//        }
-//    }
-//}
-
 public enum NetworkError: LocalizedError {
     case nonHttp
     case general(Error)
@@ -148,70 +122,46 @@ public extension NetworkRepositoryProtocol {
             }
         }
     
+    
     @discardableResult
-    func postJSON(urlReq: URLRequest, validStatusCodes: Set<Int> = Set(200...299)) async throws -> Data? {
+    func postJSON(urlReq: URLRequest, validStatusCodes: Set<Int> = Set(200...299)) async throws(NetworkError) -> Data? {
         do {
             let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
-            
-            if validStatusCodes.contains(response.statusCode) {
+
+            guard !validStatusCodes.contains(response.statusCode) else {
                 return data
-            } else {
-                let responseDecoded = try? JSONDecoder().decode(APIResponse.self, from: data)
-                
-                switch response.statusCode {
-                case 401:
-                    throw NetworkError.unauthorized
-                case 403:
-                    throw NetworkError.forbidden
-                case 404:
-                    throw NetworkError.notFound
-                case 500...599:
-                    throw NetworkError.serverError
-                default:
-                    throw NetworkError.badStatus(response.statusCode, responseDecoded?.reason)
-                }
             }
+
+            let decodedError = try? JSONDecoder().decode(APIResponse.self, from: data)
+
+            throw mapHTTPError(statusCode: response.statusCode, error: decodedError)
+            
+        } catch let networkError as NetworkError {
+            throw networkError
         } catch let urlError as URLError {
-            switch urlError.code {
-            case .notConnectedToInternet:
-                throw NetworkError.noInternet
-            case .timedOut:
-                throw NetworkError.timeout
-            default:
-                throw NetworkError.general(urlError)
-            }
+            throw mapURLError(urlError)
         } catch {
             throw NetworkError.general(error)
         }
     }
-    
-//    @discardableResult
-//    func postJSON(urlReq: URLRequest, validStatusCodes: Set<Int> = Set(200...299)) async throws(NetworkError) -> Data? {
-//        let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
-//        
-//        if validStatusCodes.contains(response.statusCode) {
-//            return data
-//        } else {
-//            let responseDecoded = try? JSONDecoder().decode(APIResponse.self, from: data)
-//            
-//            switch response.statusCode {
-//            case 401:
-//                throw NetworkError.unauthorized
-//            default:
-//                throw NetworkError.badStatus(response.statusCode, responseDecoded?.reason)
-//            }
-//        }
-//        
-////        guard validStatusCodes.contains(response.statusCode) else {
-////            do {
-////                let responseDecoded = try JSONDecoder().decode(APIResponse.self, from: data)
-////                throw NetworkError.badStatus(response.statusCode, responseDecoded.reason)
-////            } catch let error {
-////                throw NetworkError.decodingFailed(error)
-////            }
-////        }
-////        return data
-//    }
+}
+
+private func mapHTTPError(statusCode: Int, error: APIResponse?) -> NetworkError {
+    switch statusCode {
+    case 401: return .unauthorized
+    case 403: return .forbidden
+    case 404: return .notFound
+    case 500...599: return .serverError
+    default: return .badStatus(statusCode, error?.reason)
+    }
+}
+
+private func mapURLError(_ urlError: URLError) -> NetworkError {
+    switch urlError.code {
+    case .notConnectedToInternet: return .noInternet
+    case .timedOut: return .timeout
+    default: return .general(urlError)
+    }
 }
 
 struct APIResponse: Codable {
