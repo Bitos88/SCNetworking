@@ -29,6 +29,7 @@ public enum NetworkError: LocalizedError {
     case badStatus(Int, String?)
     case decodingFailed(Error)
     case encodingFailed(Error)
+    case unauthorized
     
     public var errorDescription: String {
         switch self {
@@ -42,6 +43,8 @@ public enum NetworkError: LocalizedError {
             return "Failed to decode response: \(error.localizedDescription)"
         case .encodingFailed(let error):
             return "Failed to encode request body: \(error.localizedDescription)"
+        case .unauthorized:
+            return "Email o contraseña incorrectos."
         }
     }
 }
@@ -108,15 +111,28 @@ public extension NetworkRepositoryProtocol {
     func postJSON(urlReq: URLRequest, validStatusCodes: Set<Int> = Set(200...299)) async throws(NetworkError) -> Data? {
         let (data, response) = try await URLSession.shared.customData(urlReq: urlReq)
         
-        guard validStatusCodes.contains(response.statusCode) else {
-            do {
-                let responseDecoded = try JSONDecoder().decode(APIResponse.self, from: data)
-                throw NetworkError.badStatus(response.statusCode, responseDecoded.reason)
-            } catch let error {
-                throw NetworkError.decodingFailed(error)
+        if validStatusCodes.contains(response.statusCode) {
+            return data
+        } else {
+            let responseDecoded = try? JSONDecoder().decode(APIResponse.self, from: data)
+            
+            switch response.statusCode {
+            case 401:
+                throw NetworkError.unauthorized
+            default:
+                throw NetworkError.badStatus(response.statusCode, responseDecoded?.reason)
             }
         }
-        return data
+        
+//        guard validStatusCodes.contains(response.statusCode) else {
+//            do {
+//                let responseDecoded = try JSONDecoder().decode(APIResponse.self, from: data)
+//                throw NetworkError.badStatus(response.statusCode, responseDecoded.reason)
+//            } catch let error {
+//                throw NetworkError.decodingFailed(error)
+//            }
+//        }
+//        return data
     }
 }
 
